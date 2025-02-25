@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>批量图片压缩工具</title>
+    <style>
+        :root {
+            --primary-color: #4a90e2;
+            --background: #f5f7fb;
+            --card-bg: #ffffff;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            background: var(--background);
+            line-height: 1.6;
+            padding: 2rem;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 2rem;
+        }
+
+        .title {
+            color: #1a1a1a;
+            font-size: 2.5rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .upload-box {
+            border: 2px dashed #ccc;
+            border-radius: 12px;
+            padding: 2rem;
+            text-align: center;
+            background: var(--card-bg);
+            transition: all 0.3s ease;
+            margin-bottom: 2rem;
+        }
+
+        .upload-box:hover {
+            border-color: var(--primary-color);
+            transform: translateY(-2px);
+        }
+
+        #fileInput {
+            display: none;
+        }
+
+        .custom-upload {
+            background: var(--primary-color);
+            color: white;
+            padding: 0.8rem 1.5rem;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: opacity 0.3s;
+        }
+
+        .custom-upload:hover {
+            opacity: 0.9;
+        }
+
+        .settings {
+            background: var(--card-bg);
+            padding: 1.5rem;
+            border-radius: 12px;
+            margin-bottom: 2rem;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 1.5rem;
+        }
+
+        .card {
+            background: var(--card-bg);
+            border-radius: 12px;
+            padding: 1rem;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+
+        .previews {
+            display: flex;
+            gap: 1rem;
+            margin: 1rem 0;
+        }
+
+        .preview-img {
+            width: 120px;
+            height: 120px;
+            object-fit: contain;
+            border-radius: 8px;
+            border: 1px solid #eee;
+        }
+
+        .progress {
+            height: 8px;
+            background: #eee;
+            border-radius: 4px;
+            overflow: hidden;
+            margin: 1rem 0;
+        }
+
+        .progress-bar {
+            height: 100%;
+            background: var(--primary-color);
+            transition: width 0.3s ease;
+        }
+
+        .stats {
+            font-size: 0.9rem;
+            color: #666;
+            margin: 0.5rem 0;
+        }
+
+        .download-btn {
+            display: inline-block;
+            background: var(--primary-color);
+            color: white;
+            padding: 0.5rem 1rem;
+            border-radius: 6px;
+            text-decoration: none;
+            font-size: 0.9rem;
+            transition: opacity 0.3s;
+        }
+
+        .download-btn:hover {
+            opacity: 0.9;
+        }
+
+        .quality-control {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            margin: 1rem 0;
+        }
+
+        input[type="range"] {
+            width: 200px;
+            height: 4px;
+            accent-color: var(--primary-color);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1 class="title">📷 批量图片压缩工具</h1>
+            <p>支持多选图片压缩，客户端本地处理，安全无忧</p>
+        </div>
+
+        <div class="settings">
+            <div class="quality-control">
+                <label>压缩质量：</label>
+                <input type="range" id="quality" min="0" max="1" step="0.1" value="0.8">
+                <span id="qualityValue">0.8</span>
+            </div>
+            <div class="upload-box" onclick="document.getElementById('fileInput').click()">
+                <p>点击选择文件或拖放至此区域</p>
+                <div class="custom-upload">选择多个文件</div>
+                <input type="file" id="fileInput" multiple accept="image/*">
+            </div>
+        </div>
+
+        <div id="fileList" class="grid"></div>
+    </div>
+
+    <script>
+        const fileInput = document.getElementById('fileInput');
+        const qualityInput = document.getElementById('quality');
+        const qualityValue = document.getElementById('qualityValue');
+        const fileList = document.getElementById('fileList');
+
+        qualityInput.addEventListener('input', () => {
+            qualityValue.textContent = qualityInput.value;
+            document.querySelectorAll('.card').forEach(card => {
+                if (card.dataset.originalFile) {
+                    compressImage(JSON.parse(card.dataset.originalFile), card);
+                }
+            });
+        });
+
+        fileInput.addEventListener('change', handleFiles);
+        
+        // 拖放功能
+        document.addEventListener('dragover', e => e.preventDefault());
+        document.addEventListener('drop', e => {
+            e.preventDefault();
+            fileInput.files = e.dataTransfer.files;
+            handleFiles();
+        });
+
+        async function handleFiles() {
+            const files = Array.from(fileInput.files);
+            fileList.innerHTML = '';
+            
+            files.forEach(file => {
+                const card = createCard(file);
+                fileList.appendChild(card);
+                processFile(file, card);
+            });
+        }
+
+        function createCard(file) {
+            const card = document.createElement('div');
+            card.className = 'card';
+            card.dataset.originalFile = JSON.stringify({
+                name: file.name,
+                size: file.size
+            });
+            
+            card.innerHTML = `
+                <div class="file-name">${file.name}</div>
+                <div class="previews">
+                    <img class="preview-img original">
+                    <img class="preview-img compressed">
+                </div>
+                <div class="progress">
+                    <div class="progress-bar" style="width: 0%"></div>
+                </div>
+                <div class="stats"></div>
+                <a class="download-btn" style="display: none">下载压缩文件</a>
+            `;
+            return card;
+        }
+
+        async function processFile(file, card) {
+            const originalImg = card.querySelector('.original');
+            originalImg.src = URL.createObjectURL(file);
+            
+            await compressImage(file, card);
+        }
+
+        async function compressImage(file, card) {
+            const quality = parseFloat(qualityInput.value);
+            const progressBar = card.querySelector('.progress-bar');
+            const downloadBtn = card.querySelector('.download-btn');
+            const stats = card.querySelector('.stats');
+
+            progressBar.style.width = '30%';
+            
+            try {
+                const img = await loadImage(file);
+                progressBar.style.width = '60%';
+                
+                const canvas = document.createElement('canvas');
+                const ctx = canvas.getContext('2d');
+                
+                // 调整尺寸
+                const maxWidth = 1200;
+                const scale = Math.min(maxWidth / img.width, 1);
+                canvas.width = img.width * scale;
+                canvas.height = img.height * scale;
+                
+                ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                
+                canvas.toBlob(blob => {
+                    const compressedImg = card.querySelector('.compressed');
+                    compressedImg.src = URL.createObjectURL(blob);
+                    
+                    // 更新下载链接
+                    downloadBtn.href = compressedImg.src;
+                    downloadBtn.download = `compressed_${file.name}`;
+                    downloadBtn.style.display = 'inline-block';
+                    
+                    // 更新统计信息
+                    const ratio = ((1 - blob.size/file.size) * 100).toFixed(1);
+                    stats.innerHTML = `
+                        <div>原始大小：${formatSize(file.size)}</div>
+                        <div>压缩后：${formatSize(blob.size)}</div>
+                        <div>压缩率：${ratio}%</div>
+                    `;
+                    
+                    progressBar.style.width = '100%';
+                    setTimeout(() => progressBar.style.width = '0%', 500);
+                }, 'image/jpeg', quality);
+            } catch (error) {
+                stats.innerHTML = `<div style="color: red">处理失败：${error.message}</div>`;
+                progressBar.style.backgroundColor = '#ff4757';
+            }
+        }
+
+        function loadImage(file) {
+            return new Promise((resolve, reject) => {
+                const img = new Image();
+                img.onload = () => resolve(img);
+                img.onerror = (e) => reject(new Error('图片加载失败'));
+                img.src = URL.createObjectURL(file);
+            });
+        }
+
+        function formatSize(bytes) {
+            if (bytes >= 1048576) return (bytes/1048576).toFixed(2) + ' MB';
+            return (bytes/1024).toFixed(2) + ' KB';
+        }
+    </script>
+</body>
+</html>
